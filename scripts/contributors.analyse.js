@@ -3,25 +3,18 @@ const { existsSync, readFileSync, writeFileSync } = require("node:fs");
 const { spawnSync } = require("node:child_process");
 const { load, dump } = require("js-yaml");
 const { jit } = require("@abysser/jit");
+const { isObj, isArr, hasOwn } = require("./utils");
 
 const cwd = process.cwd();
 const { platform } = process;
 const args = process.argv.slice(2);
-const options = Object.assign(
-    { this: false, write: false, add: false },
-    {
-        this: args.some(arg => /^(--this|-t)$/.test(arg)), // whether to reckon this commitment in
-        write: args.some(arg => /^(--write|-w)$/.test(arg)), // whether to write the result back
-        add: args.some(arg => /^(--add|-a)$/.test(arg)), // whether to add target file to the staged
-    }
-);
+const options = {
+    write: args.some(arg => /^(--write|-w)$/.test(arg)), // whether to write the result back
+    add: args.some(arg => /^(--add|-a)$/.test(arg)), // whether to add target file to the staged
+};
 const target = resolve(cwd, "./_config.abyrus.yml");
 
 if (existsSync(target)) {
-    const { hasOwnProperty, toString: typeOf } = Object.prototype;
-    const has = (o, k) => hasOwnProperty.call(o, k);
-    const isObj = o => typeOf.call(o) === "[object Object]";
-    const isArr = o => typeOf.call(o) === "[object Array]";
     const configs = load(readFileSync(target, { encoding: "utf8" }));
     if (isObj(configs) && configs?.widgets && isArr(configs.widgets)) {
         const idx = configs.widgets.findIndex(widget => widget?.type === "profile");
@@ -29,25 +22,35 @@ if (existsSync(target)) {
             const profile = configs.widgets[idx];
             if (profile?.contributors && isArr(profile.contributors)) {
                 const repo = jit.repo(resolve(cwd));
-                const { formatted } = repo.do("log", ["--pretty=format:%an"]);
+                const { formatted } = repo.do("shortlog", ["HEAD", "-sne"]);
                 if (formatted) {
-                    const commits = formatted.reduce((sets, curr) => {
-                        if (has(sets, curr)) {
-                            sets[curr]++;
-                        } else {
-                            sets[curr] = options.this && repo.user.name === curr ? 1 : 0;
-                        }
-                        return sets;
-                    }, {});
+                    /* groups: { keys: string[]; summary: number; }[] */
+                    const groups = formatted.reduce((groups, contributor) => {
+                        let flag = false;
+                        const { name, email, summary } = contributor;
+                        const ghname = /(^\d+\+)?\S+@users.noreply.github.com$/.test(email)
+                            ? email.replace(/^\d+\+/, "").replace(/@users.noreply.github.com$/, "")
+                            : undefined;
+                        const keys = [name, email, ...(ghname ? [ghname] : [])];
+                        groups = groups.map(group => {
+                            if (group.keys.some(k => keys.includes(k))) {
+                                group.keys = [...new Set([...group.keys, ...keys])];
+                                group.summary += summary;
+                                flag = true;
+                            }
+                            return group;
+                        });
+                        if (!flag) groups.push({ keys, summary });
+                        return groups;
+                    }, []);
                     profile.contributors = profile.contributors
-                        .filter(contributor => isObj(contributor) && has(contributor, "name"))
+                        .filter(contributor => isObj(contributor) && hasOwn(contributor, "name"))
                         .map(contributor => {
-                            contributor["contributions"] = Object.keys(commits).includes(contributor["name"])
-                                ? commits[contributor["name"]]
-                                : 0;
+                            const group = groups.find(group => group.keys.includes(contributor["name"]));
+                            contributor["contributions"] = group ? group.summary : 0;
                             return contributor;
                         })
-                        .sort((a, b) => b["contributions"] - a["contributions"] || 0);
+                        .sort((a, b) => b["contributions"] - a["contributions"]);
                     if (options.write) {
                         writeFileSync(target, dump(configs, { indent: 4, quotingType: '"' }), { encoding: "utf8" });
                         switch (platform) {
