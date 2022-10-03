@@ -4,14 +4,21 @@ toc: true
 author: Morilence
 date: 2022-09-21T12:59:39.000Z
 contributors:
-  - name: Morilence
-    email: 1280659615@qq.com
-    contributions: 1
+    - name: Morilence
+      avatar: "https://avatars.githubusercontent.com/u/44861693"
+      link: "https://github.com/Morilence"
+      contributions: 6
+    - name: slanceli
+      avatar: "https://avatars.githubusercontent.com/u/43295293"
+      link: "https://github.com/slanceli/"
+      contributions: 1
 updatedby: Morilence
-updated: 2022-09-21T16:25:18.000Z
+updated: 2022-09-24T05:57:28.000Z
 ---
 
 本文仅为准备参与该博客项目的成员提供工作流程与规范上的指导。
+
+<!-- more -->
 
 ## 简介
 
